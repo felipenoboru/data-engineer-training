@@ -32,7 +32,7 @@ Se você utiliza múltiplos perfis AWS, defina o profile e a região padrão ant
 
 ```bash
 export AWS_PROFILE=mobiis
-export AWS_DEFAULT_REGION=us-east-1
+export AWS_DEFAULT_REGION=us-east-2
 ```
 
 ```bash
