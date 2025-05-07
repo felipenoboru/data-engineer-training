@@ -1,0 +1,27 @@
+version: 2
+
+sources:
+  - name: cog_glueraw
+    schema: treinamento-db-mobiis-cog
+    description: >
+      Fonte bruta de vendas, extraída do Glue/Athena. 
+      Contém todos os registros originais de vendas para o exercício.
+    tables:
+      - name: cog-glueraw
+        description: >
+          Tabela raw de vendas, utilizada como ponto de partida para a camada silver.
+        columns:
+          - name: id_venda
+            description: Identificador único da venda.
+          - name: produto
+            description: Nome do produto vendido.
+          - name: quantidade
+            description: Quantidade de itens vendidos.
+          - name: preco_unitario
+            description: Preço unitário do produto.
+          - name: loja
+            description: Nome da loja onde a venda foi realizada.
+          - name: metodo_pagamento
+            description: Método de pagamento utilizado na venda.
+          - name: data_venda
+            description: Data e hora da venda.

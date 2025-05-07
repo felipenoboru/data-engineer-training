@@ -1,0 +1,11 @@
+athena:
+  target: dev
+  outputs:
+    dev:
+      type: athena
+      s3_staging_dir: s3://mobiis-treinamento-cognitivo/dbt-athena-stage/
+      region_name: us-east-2
+      schema: dbt                  # Schema de destino (Athena usa o mesmo valor de database/schema)
+      aws_profile_name: mobiis             # Nome do profile AWS CLI
+      threads: 4
+      database: awsdatacatalog

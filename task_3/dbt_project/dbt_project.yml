@@ -1,0 +1,17 @@
+name: 'dbt_sample_project'
+version: '1.0'
+config-version: 2
+
+profile: 'athena'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+models:
+  staging:
+    +materialized: view
+    +schema: silver_data
+  gold:
+    +materialized: table
+    +schema: gold_data
