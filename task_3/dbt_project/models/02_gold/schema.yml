@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: dim_produto
+    description: Dimensão de produtos.
+    columns:
+      - name: descricao
+        tests:
+          - not_null
+
+  - name: fct_vendas
+    description: Fato de vendas.
+    columns:
+      - name: valor_total
+        tests:
+          - not_null

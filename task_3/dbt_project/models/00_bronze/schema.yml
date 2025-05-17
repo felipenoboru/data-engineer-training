@@ -1,0 +1,51 @@
+# filepath: /task_3/dbt_project/models/00_source/athena.yml
+version: 2
+
+sources:
+  - name: bronze
+    schema: silver_nome_sobrenome  # ATENÇÃO: cada aluno deve alterar para o seu schema/database correto!
+    description: >
+      Camada silver do projeto, contendo tabelas de vendas (fato) e produtos (dimensão).
+    tables:
+      - name: produtos
+        description: >
+          Tabela de produtos processada na camada silver, origem da dimensão produto.
+        columns:
+          - name: codigo
+            description: Código do produto.
+          - name: ean
+            description: Código EAN do produto.
+          - name: descricao
+            description: Descrição do produto.
+          - name: preco_unitario
+            description: Preço unitário do produto.
+      - name: daily_sales
+        description: >
+          Tabela de vendas processada na camada silver, origem da fato.
+        columns:
+          - name: _id
+            description: Identificador único da venda.
+          - name: data
+            description: Data da venda.
+          - name: idsetor
+            description: Identificador do setor.
+          - name: codigo
+            description: Código do produto (chave para dimensão produto).
+          - name: ean
+            description: Código EAN do produto.
+          - name: descricao
+            description: Descrição do produto.
+          - name: quantidade
+            description: Quantidade de itens vendidos.
+          - name: valor_total
+            description: Valor total da venda.
+          - name: fl_produtopromocao
+            description: Flag indicando se o produto estava em promoção.
+          - name: quant_cupom_fiscal
+            description: Quantidade de cupons fiscais.
+          - name: preco_unitario
+            description: Preço unitário do produto.
+          - name: ano
+            description: Ano da venda.
+          - name: mes
+            description: Mês da venda.

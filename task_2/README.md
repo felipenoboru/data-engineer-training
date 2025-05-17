@@ -1,337 +1,193 @@
-# 🧪 Projeto Hands-on: Pipeline com AWS S3, Glue e Athena
+# 🧪 Projeto Hands-on: Pipeline com AWS S3, Glue e Athena (Camada Silver)
 
 ## 📑 Índice
 
 1. [Objetivo](#objetivo)
 2. [Pré-requisitos](#pré-requisitos)
 3. [Etapas da Atividade](#etapas-da-atividade)
-   - [1. Criar o Glue Job](#1-criar-o-glue-job)
-   - [2. Executar o Job](#2-executar-o-job)
-   - [3. Validar Resultados](#3-validar-resultados)
-   - [4. Registrar a tabela Gold no Glue Catalog](#4-registrar-a-tabela-gold-no-glue-catalog)
-   - [5. Verificar e Configurar Permissões no IAM](#5-verificar-e-configurar-permissões-no-iam)
-   - [6. Verificação Final dos Resultados](#6-verificação-final-dos-resultados)
+   - [1. Parâmetros Pessoais](#1-parâmetros-pessoais)
+   - [2. Leitura da Tabela de Origem](#2-leitura-da-tabela-de-origem)
+   - [3. Configurar Permissões no IAM](#3-configurar-permissões-no-iam)
+   - [4. Criação do Glue Job para Silver](#4-criação-do-glue-job-para-silver)
+   - [5. Execução e Validação](#5-execução-e-validação)
+   - [6. Registro e Atualização no Glue Catalog](#6-registro-e-atualização-no-glue-catalog)
+   - [7. Verificação Final dos Resultados](#7-verificação-final-dos-resultados)
 4. [Boas Práticas](#boas-práticas)
 5. [Extras](#extras)
-6. [Resultado Esperado](#resultado-esperado)
+6. [Exercício Adicional](#6-exercício-adicional)
+7. [Resultado Esperado](#resultado-esperado)
 
 ---
 
 ## 📌 Objetivo
 
-Nesta atividade, vamos construir um **pipeline de dados** utilizando **AWS Glue, S3 e Athena**, realizando:
+Construir um pipeline de dados usando **AWS Glue, S3 e Athena**, partindo da tabela de vendas `"treinamento-db-mobiis-cog"."daily_sales"` na camada Bronze. O objetivo é criar duas novas tabelas na camada Silver:
 
-- Leitura de dados particionados via **Athena**
-- Transformação com **AWS Glue + Spark**
-- Escrita em uma nova camada **Gold** no S3
-- Verificação dos resultados no **Glue Catalog**, **Athena**, e **CloudWatch Logs**
+1. **Tabela `daily_sales`**: Uma versão da tabela original sem as colunas `dia_semana` e `mes`.
+2. **Tabela `produtos`**: Uma tabela contendo os valores distintos de `codigo`, `ean`, `descricao` e `preco_unitario`.
 
-O foco é praticar paralelismo e boas práticas de execução distribuída com **Glue Spark Jobs**, observando custo, desempenho e organização de logs.
+Os resultados finais devem ser gravados na camada Silver, utilizando Glue Jobs para transformação e gravação.
 
 ---
 
 ## ✅ Pré-requisitos
 
-- Conta AWS com permissões nos serviços:
-  - Glue
-  - S3
-  - Athena
-  - CloudWatch
-- Tabelas previamente criadas no Glue Catalog:
-  - `bronze_data.sample_bronze_data` (camada Bronze)
-  - `silver_data.sample_data_partitioned` (camada Silver)
-- Bucket S3 com estrutura de pastas: `bronze/`, `silver/`, `gold/`
+- Conta AWS com permissões nos serviços: Glue, S3, Athena
+- Tabela de origem: `"treinamento-db-mobiis-cog"."daily_sales"` (localizada na camada Bronze)
+- Bucket S3 próprio (exemplo: `mobiis-treinamento-nome-sobrenome`)
+- Glue Catalog configurado
+- **Todos os nomes de objetos (buckets, tabelas, databases, paths) devem conter seu nome e sobrenome para evitar conflitos.**
 
 ---
 
 ## 🛠️ Etapas da Atividade
 
-### 1. Criar o Glue Job
+### 1. Parâmetros Pessoais
+
+Antes de começar, defina um identificador único para seus objetos:
+
+- **Exemplo:**  
+  - Nome: João Silva  
+  - Bucket: `mobiis-treinamento-joao-silva`
+  - Database Glue: `silver_joao_silva`
+  - Tabela Silver 1: `daily_sales_joao_silva`
+  - Tabela Silver 2: `produtos_joao_silva`
+  - Caminho S3 para `daily_sales`: `s3://mobiis-treinamento-joao-silva/silver/daily_sales/`
+  - Caminho S3 para `produtos`: `s3://mobiis-treinamento-joao-silva/silver/produtos/`
+
+> Substitua `joao-silva` pelo seu nome e sobrenome SEM espaços e SEM caracteres especiais.
+
+---
+
+### 2. Leitura da Tabela de Origem
+
+A tabela de origem `"treinamento-db-mobiis-cog"."daily_sales"` possui milhões de registros.
+
+**Exemplo de leitura com limite (Athena):**
+```sql
+SELECT * FROM "treinamento-db-mobiis-cog"."daily_sales"
+LIMIT 100000;
+```
+
+---
+
+### 3. Configurar Permissões no IAM
+
+Antes de executar o Glue Job, é necessário configurar as permissões adequadas na role IAM associada ao Glue.
+
+#### Passo 1: Criar ou Editar a Role IAM
+
+1. Acesse o console da AWS e vá para o serviço **IAM**.
+2. Crie uma nova role ou edite uma existente:
+   - **Tipo de Serviço:** Escolha **Glue**.
+   - **Permissões:** Adicione as seguintes políticas:
+     - `AWSGlueServiceRole`: Permite que o Glue execute jobs e acesse o Glue Catalog.
+     - `AmazonS3FullAccess` (ou restrinja ao bucket do aluno): Permite que o Glue leia e grave dados no S3.
+     - `AmazonAthenaFullAccess`: Permite que o Glue interaja com o Athena, se necessário.
+   - **Nome da Role:** `AWSGlueServiceRole-nome-sobrenome`.
+
+3. Salve a role.
+
+#### Passo 2: Verificar Permissões no Bucket S3
+
+1. Acesse o console do S3 e localize o bucket do aluno.
+2. Certifique-se de que a role criada tenha permissões de leitura e gravação no bucket.
+
+---
+
+### 4. Criação do Glue Job para Silver
+
+#### Passo 1: Criar o Glue Job
 
 - Acesse o serviço **AWS Glue > Jobs > Criar Job**.
 - Preencha os campos do formulário conforme abaixo:
 
 **Job Details:**
-- **Name:** `job-transform-silver-to-gold`
-- **IAM Role:** Selecione uma role com as permissões necessárias para Glue, S3 e Glue Catalog.
+- **Name:** `job-transform-daily-sales-silver-nome-sobrenome`
+- **IAM Role:** Selecione a role criada anteriormente (`AWSGlueServiceRole-nome-sobrenome`).
 - **Type:** Spark
 - **Glue Version:** Glue 5.0
 - **Language:** Python 3
 - **Worker Type:** G.1X
 - **Number of Workers:** 2
-- **Max Concurrent Runs:** 1 (ou ajuste conforme sua necessidade)
-- **Script file path:** Faça upload do script Python para um bucket S3 e informe o caminho aqui.
-- **Temporary directory:** Informe um caminho temporário em S3, por exemplo: `s3://mobiis-treinamento-cognitivo/temp/`
+- **Max Concurrent Runs:** 1
+- **Temporary directory:** Informe um caminho temporário em S3, por exemplo: `s3://mobiis-treinamento-nome-sobrenome/temp/`
 
-**Observação:**  
-Essas configurações garantem que o job utilize Spark 3.5 (Glue 5.0), Python 3, e execute em paralelo com 2 workers do tipo G.1X, conforme solicitado.
+#### Passo 2: Adicionar o Script do Glue Job
 
-Adicione o seguinte código ao Glue Job:
+Adicione o seguinte código ao Glue Job: /task_2/glue_job_script.py
 
-```python
-import sys
-import boto3
-import re
-from awsglue.utils import getResolvedOptions
-from pyspark.context import SparkContext
-from awsglue.context import GlueContext
-from awsglue.job import Job
-from awsglue.dynamicframe import DynamicFrame
-
-class GlueJobRunner:
-    def __init__(self, job_name):
-        self.args = {'JOB_NAME': job_name}
-        self.sc = SparkContext()
-        self.glue_context = GlueContext(self.sc)
-        self.spark = self.glue_context.spark_session
-        self.job = Job(self.glue_context)
-        self.job.init(job_name, self.args)
-        self.s3 = boto3.resource('s3')
-        self.glue_client = boto3.client('glue')
-
-    def clean_s3_path(self, s3_uri):
-        """
-        Limpa todos os objetos dentro do caminho S3 especificado.
-        Ex: s3://bucket/path/ -> remove todos os objetos sob 'path/'
-        """
-        match = re.match(r"s3://([^/]+)/(.+)", s3_uri)
-        if not match:
-            raise ValueError("S3 URI inválido.")
-        bucket_name, prefix = match.groups()
-        bucket = self.s3.Bucket(bucket_name)
-        bucket.objects.filter(Prefix=prefix).delete()
-
-    def create_catalog_table(self, database, table_name, s3_path, columns, partitions):
-        """
-        Cria uma nova tabela no Glue Catalog.
-        """
-        self.glue_client.create_table(
-            DatabaseName=database,
-            TableInput={
-                'Name': table_name,
-                'StorageDescriptor': {
-                    'Columns': columns,
-                    'Location': s3_path,
-                    'InputFormat': 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat',
-                    'OutputFormat': 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat',
-                    'SerdeInfo': {
-                        'SerializationLibrary': 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe',
-                        'Parameters': {'serialization.format': '1'}
-                    },
-                    'StoredAsSubDirectories': False
-                },
-                'PartitionKeys': partitions,
-                'TableType': 'EXTERNAL_TABLE',
-                'Parameters': {
-                    'classification': 'parquet',
-                    'compressionType': 'snappy',
-                    'typeOfData': 'file'
-                }
-            }
-        )
-
-    def run(self):
-        # Configurações
-        source_db = "silver_data"
-        source_table = "sample_data_partitioned"
-        target_db = "gold_data"
-        target_table = "sample_data_aggregated"
-        target_path = "s3://mobiis-treinamento-cognitivo/gold/"
-
-        # Limpa dados antigos no S3
-        self.clean_s3_path(target_path)
-
-        # Leitura da tabela particionada da camada Silver
-        df = self.glue_context.create_dynamic_frame.from_catalog(
-            database=source_db,
-            table_name=source_table
-        )
-
-        # Transformação: calcula média salarial por idade, ativo, ano, mês
-        df_transformed = df.toDF() \
-            .groupBy("idade", "ativo", "ano", "mes") \
-            .agg({"salario": "avg"}) \
-            .withColumnRenamed("avg(salario)", "salario_medio")
-
-        # Converte de volta para DynamicFrame
-        df_transformed = DynamicFrame.fromDF(df_transformed, self.glue_context, "df_transformed")
-
-        # Cria a tabela no Glue Catalog (caso ainda não exista)
-        try:
-            self.create_catalog_table(
-                database=target_db,
-                table_name=target_table,
-                s3_path=target_path,
-                columns=[
-                    {"Name": "idade", "Type": "int"},
-                    {"Name": "ativo", "Type": "boolean"},
-                    {"Name": "salario_medio", "Type": "double"},
-                ],
-                partitions=[
-                    {"Name": "ano", "Type": "int"},
-                    {"Name": "mes", "Type": "int"}
-                ]
-            )
-        except self.glue_client.exceptions.AlreadyExistsException:
-            pass  # Tabela já existe
-
-        # Escreve os dados no S3 e atualiza o catálogo Glue
-        self.glue_context.write_dynamic_frame.from_options(
-            frame=df_transformed,
-            connection_type="s3",
-            connection_options={
-                "path": target_path,
-                "partitionKeys": ["ano", "mes"],
-                "enableUpdateCatalog": True,
-                "updateBehavior": "UPDATE_IN_DATABASE",
-                "database": target_db,
-                "tableName": target_table
-            },
-            format="parquet",
-            format_options={"compression": "snappy"}
-        )
-
-        self.job.commit()
-
-
-if __name__ == "__main__":
-    args = getResolvedOptions(sys.argv, ['JOB_NAME'])
-    job_runner = GlueJobRunner(args['JOB_NAME'])
-    job_runner.run()
-```
-
-⚠️ Configure o job com **número de workers > 1** para garantir paralelismo.
+⚠️ **Importante:**  
+- Substitua `nome-sobrenome` pelo seu nome e sobrenome SEM espaços e SEM caracteres especiais.
+- Configure o job com **número de workers > 1** para garantir paralelismo.
 
 ---
 
-### 2. Executar o Job
-
-- Inicie o job pelo console
-- Aguarde a conclusão
-
 ---
 
-### 3. Validar Resultados
+### 5. Registro e Atualização no Glue Catalog
 
-#### ✅ Glue Catalog
-- Verifique se a nova tabela foi criada ou atualizada na database da camada `gold_data`.
-
-#### ✅ Athena
-- Execute a consulta:
-  ```sql
-  SELECT * FROM gold_data.sample_data_partitioned LIMIT 10;
-  ```
-
-#### ✅ CloudWatch Logs
-- Vá em **CloudWatch > Log groups**
-- Acesse o grupo correspondente ao Glue Job
-- Verifique se foram criados múltiplos **log streams** (um para cada executor/worker do Spark)
-
----
-
-### 4. Registrar a tabela Gold no Glue Catalog
-
-Após a execução do Glue Job, é necessário garantir que a tabela e suas partições estejam visíveis no Glue Catalog e no Athena. Você pode fazer isso de duas formas:
+Após a execução do Glue Job, é necessário garantir que as tabelas e suas partições estejam visíveis no Glue Catalog e no Athena. Você pode fazer isso de duas formas:
 
 #### Opção A – Criar e executar um Glue Crawler
 
-- Acesse o serviço **AWS Glue > Crawlers > Criar Crawler**.
-- **Name:** `crawler-gold-data`
+- **Name:** `crawler-silver-data-nome-sobrenome`
 - **Fonte de dados:** S3
-- **Caminho:** `s3://mobiis-treinamento-cognitivo/gold/`
+- **Caminho:** `s3://mobiis-treinamento-nome-sobrenome/silver/`
 - **Destino:** Glue Data Catalog
-- **Database:** `gold_data`
-- Execute o crawler para registrar a tabela e as partições no Glue Catalog.
+- **Database:** `silver_nome_sobrenome`
+- marque :Create a single schema for each S3 path 
 
 #### Opção B – Atualizar partições diretamente no Athena
 
-Se preferir, você pode atualizar as partições da tabela gold diretamente pelo Athena com o comando:
-
 ```sql
-MSCK REPAIR TABLE gold_data.sample_data_aggregated;
+MSCK REPAIR TABLE silver_nome_sobrenome.daily_sales_nome_sobrenome;
 ```
 
----
+### 6. Execução e Validação
 
-### 5. Verificar e Configurar Permissões no IAM
+#### Execução do Job
+- Inicie o job pelo console.
+- Aguarde a conclusão.
 
-Antes de executar o Glue Job, certifique-se de que a **IAM Role** associada ao job possui as permissões necessárias para acessar o S3 e o Glue Catalog.  
-Inclua a seguinte policy na role utilizada pelo Glue Job:
+#### Validação dos Resultados
 
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "S3Access",
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject",
-                "s3:DeleteObject",
-                "s3:ListBucket"
-            ],
-            "Resource": [
-                "arn:aws:s3:::mobiis-treinamento-cognitivo",
-                "arn:aws:s3:::mobiis-treinamento-cognitivo/*"
-            ]
-        },
-        {
-            "Sid": "GlueCatalogAccess",
-            "Effect": "Allow",
-            "Action": [
-                "glue:CreateTable",
-                "glue:UpdateTable",
-                "glue:GetTable",
-                "glue:GetTables",
-                "glue:DeleteTable",
-                "glue:GetDatabase",
-                "glue:GetDatabases",
-                "glue:CreateDatabase",
-                "glue:UpdateDatabase",
-                "glue:DeleteDatabase"
-            ],
-            "Resource": "*"
-        }
-    ]
-}
-```
+**Glue Catalog:**  
+- Verifique se as novas tabelas foram criadas ou atualizadas na database da camada `silver_nome_sobrenome`.
 
-> **Dica:**  
-> Para adicionar a policy, acesse o console IAM, selecione a role usada pelo Glue Job, clique em "Adicionar permissões" e cole o JSON acima.
-
----
-
-### 6. Verificação Final dos Resultados
-
-Após a execução de todas as etapas, faça as seguintes verificações para garantir que o pipeline foi concluído com sucesso:
-
-#### a) Verificar o conteúdo da camada Gold no Bucket S3
-
-- Acesse o console do S3 e navegue até o bucket `mobiis-treinamento-cognitivo/gold/`.
-- Confirme que existem arquivos Parquet organizados nas pastas de partição (`ano=` e `mes=`).
-- Você também pode usar o comando abaixo para listar os arquivos via terminal:
-  ```bash
-  aws s3 ls s3://mobiis-treinamento-cognitivo/gold/ --recursive
-  ```
-
-#### b) Verificar os logs do job executado no CloudWatch
-
-- Acesse o serviço **CloudWatch > Log groups**.
-- Localize o log group correspondente ao seu Glue Job (`/aws-glue/jobs/output`).
-- Verifique se há múltiplos log streams (um para cada worker) e se não há erros nos logs.
-
-#### c) Verificar os resultados das tabelas no Glue Catalog
-
-- Acesse o serviço **AWS Glue > Databases**.
-- Confirme que a tabela `sample_data_aggregated` está presente na database `gold_data`.
-- Verifique se as partições foram criadas corretamente.
-- No Athena, execute uma consulta para visualizar os dados:
+**Athena:**  
+- Execute as consultas:
   ```sql
-  SELECT * FROM gold_data.sample_data_aggregated LIMIT 10;
+  SELECT * FROM silver_nome_sobrenome.daily_sales LIMIT 10;
   ```
 
-Se todos esses itens estiverem corretos, seu pipeline está funcionando de ponta a ponta!
+  ```sql
+  SELECT * FROM silver_nome_sobrenome.produtos LIMIT 10;
+  ```
+
+
+---
+
+### 7. Verificação Final dos Resultados
+
+Após a execução do Glue Job e a atualização do Glue Catalog, verifique os seguintes pontos:
+
+1. **No Glue Catalog:**
+   - Confirme que as tabelas `daily_sales` e `produtos` foram criadas na database `silver_nome_sobrenome`.
+
+2. **No Athena:**
+   - Execute as consultas:
+     ```sql
+     SELECT * FROM silver_nome_sobrenome.daily_sales LIMIT 10;
+     ```
+     ```sql
+     SELECT * FROM silver_nome_sobrenome.produtos LIMIT 10;
+     ```
+
+3. **No S3:**
+   - Verifique se os dados foram gravados nos caminhos:
+     - `s3://mobiis-treinamento-nome-sobrenome/silver/daily_sales/`
+     - `s3://mobiis-treinamento-nome-sobrenome/silver/produtos/`
 
 ---
 
@@ -346,19 +202,71 @@ Se todos esses itens estiverem corretos, seu pipeline está funcionando de ponta
 
 ## 📎 Extras
 
-- 🔗 [Documentação Glue Job](https://docs.aws.amazon.com/glue/latest/dg/glue-jobs.html)
-- 🔗 [Documentação CloudWatch Logs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html)
-- 🔗 [AWS Pricing - Glue](https://aws.amazon.com/glue/pricing/)
+- 🔗 [Documentação Glue Crawler](https://docs.aws.amazon.com/glue/latest/dg/add-crawler.html)
+- 🔗 [Documentação Athena](https://docs.aws.amazon.com/athena/latest/ug/what-is.html)
 - 🔗 [AWS Pricing - Athena](https://aws.amazon.com/athena/pricing/)
 - 🔗 [AWS Pricing - S3](https://aws.amazon.com/s3/pricing/)
 
 ---
 
+## 🧍️‍♂️ Exercício Adicional: Validação de Qualidade dos Dados (Data Quality)
+
+A validação de qualidade dos dados é um passo essencial para garantir que os dados processados atendam aos requisitos de integridade e consistência. O **AWS Glue 5.0** oferece suporte nativo para a criação de regras de qualidade utilizando a linguagem **DQDL (Data Quality Definition Language)**.
+
+### 🚀 Desafio: Crie suas próprias regras de validação
+
+Utilize o exemplo abaixo como ponto de partida para criar um conjunto de regras de qualidade para os dados processados no pipeline:
+
+```python
+dq_ruleset = """
+Rules = [
+    IsComplete "preco_unitario",          # Garante que a coluna 'preco_unitario' não tenha valores nulos
+    ColumnValues "preco_unitario" > 0,   # Garante que os valores de 'preco_unitario' sejam maiores que 0
+    IsUnique "id_produto"                # Garante que os valores de 'id_produto' sejam únicos
+]
+"""
+```
+
+### 📘 Como funciona a linguagem DQDL?
+
+A **DQDL (Data Quality Definition Language)** é uma linguagem declarativa usada para definir regras de qualidade de dados. Cada regra é composta por:
+
+- **Nome da Regra:** Define o tipo de validação (ex.: `IsComplete`, `IsUnique`, `ColumnValues`).
+- **Coluna Alvo:** Especifica a coluna que será validada.
+- **Condição (Opcional):** Define critérios adicionais para validação (ex.: `> 0`).
+
+#### Exemplos de Regras:
+- `IsComplete "coluna"`: Verifica se a coluna não contém valores nulos.
+- `IsUnique "coluna"`: Garante que os valores da coluna sejam únicos.
+- `ColumnValues "coluna" > valor`: Valida se os valores da coluna atendem a uma condição específica.
+
+### 📝 Tarefa
+
+1. **Crie suas próprias regras de validação** para as tabelas `daily_sales` e `produtos`.  
+   - Exemplo: Valide que `descricao` não seja nula e que `codigo` seja único.
+
+2. **Implemente as regras no Glue Job** utilizando o recurso de validação de qualidade.
+
+3. **Execute o Glue Job e, após a execução, acesse a aba "Data Quality" no console do Glue Job.**  
+   - Verifique os resultados em **"Data quality result"** e confira o **score** de qualidade dos dados para cada regra aplicada.
+
+4. **Teste e valide os resultados** no Glue Catalog e no Athena.
+
+### 🔗 Recursos Úteis
+
+- [Documentação Oficial do AWS Glue Data Quality](https://docs.aws.amazon.com/pt_br/glue/latest/dg/dqdl.html): Explore mais exemplos e detalhes sobre a linguagem DQDL.
+- [AWS Glue Data Quality Ruleset](https://docs.aws.amazon.com/glue/latest/dg/data-quality-ruleset.html): Saiba como configurar e aplicar regras de qualidade no Glue.
+
+---
+
+💡 **Dica:** Aplique as regras de qualidade antes de gravar os dados na camada Silver para garantir que apenas dados válidos sejam processados.
+
+---
+
 ## ✅ Resultado Esperado
 
-- Nova tabela criada em `gold_data.sample_data_partitioned` no Glue Catalog.
-- Dados disponíveis em Athena para consulta.
-- Logs no CloudWatch separados por node (log stream por executor).
-- Pipeline completo com leitura, transformação, gravação e observabilidade.
+- Tabelas `daily_sales` e `produtos` criadas na camada Silver.
+- Dados disponíveis no Glue Catalog e Athena para consulta.
+- Pipeline completo com leitura, transformação, validação e gravação.
 
 ---
