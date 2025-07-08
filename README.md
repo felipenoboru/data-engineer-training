@@ -2,8 +2,6 @@
 
 Este repositório contém o material do treinamento prático para aspirantes a engenheiros de dados. Ele aborda tópicos essenciais como ingestão de dados, transformação, armazenamento, orquestração e fluxos de trabalho baseados em nuvem. Ideal para iniciantes e profissionais de nível intermediário que desejam desenvolver habilidades práticas em engenharia de dados moderna.
 
-Este arquivo descreve o conteúdo ministrado no treinamento de Engenharia de Dados. Neste repositório, você encontrará as ferramentas necessárias para implementação e demonstração durante as aulas.
-
 ---
 
 ## Conteúdo Programático
